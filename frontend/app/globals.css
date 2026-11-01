@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --bg: #0b0c0e;
+  --surface: #131518;
+  --surface-2: #1a1d21;
+  --surface-3: #23272c;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #ecedee;
+  --text-2: #b4b8bf;
+  --muted: #7b8089;
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, 0.14);
+  --good: #0ca30c;
+  --good-text: #3ccf3c;
+  --good-soft: rgba(12, 163, 12, 0.14);
+  --warning: #fab219;
+  --warning-soft: rgba(250, 178, 25, 0.13);
+  --serious: #ec835a;
+  --serious-soft: rgba(236, 131, 90, 0.15);
+  --critical: #d03b3b;
+  --critical-text: #f07070;
+  --critical-soft: rgba(208, 59, 59, 0.15);
+  --grid: #2c2c2a;
+  --axis: #383835;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--text);
+  --color-fg-2: var(--text-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-good-text: var(--good-text);
+  --color-good-soft: var(--good-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-serious: var(--serious);
+  --color-serious-soft: var(--serious-soft);
+  --color-critical: var(--critical);
+  --color-critical-text: var(--critical-text);
+  --color-critical-soft: var(--critical-soft);
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Injected attacker text inside tool output */
+mark.injection {
+  background: var(--serious-soft);
+  color: #ffc4ad;
+  border-bottom: 1px dashed var(--serious);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+mark.taint {
+  background: var(--critical-soft);
+  color: #ffb3b3;
+  outline: 1px solid var(--critical);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.28s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+}
+
+/* Evidence reports print on white paper. */
+@media print {
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f4f2;
+    --surface-3: #ececea;
+    --border: rgba(0, 0, 0, 0.14);
+    --border-strong: rgba(0, 0, 0, 0.25);
+    --text: #0b0b0b;
+    --text-2: #33322f;
+    --muted: #66655f;
+    --good-text: #006300;
+    --critical-text: #b42323;
+    --warning: #8a5a00;
+  }
+}
+
+::selection {
+  background: var(--accent-soft);
+}
