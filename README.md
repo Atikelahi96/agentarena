@@ -2,12 +2,31 @@
 
 **Test whether an AI agent can be hijacked through its tools — then protect it at runtime.** Built on Meta's Muse models for the Meta Global AI Developer Hackathon (indie track).
 
-AI agents read tickets, documents and web pages, then act: they send email, update records, file reports. Anything they read can carry instructions written by an attacker (indirect prompt injection). This project has two halves:
+AI agents read tickets, documents, web pages and screenshots, then act: they send email, update records, file reports. Anything they read can carry instructions written by an attacker (indirect prompt injection) — even text rendered inside an image. This project has two halves:
 
 - **AgentArena** — a reproducible benchmark that runs a real Meta model as a tool-using agent in a safe synthetic sandbox, hides attacks in the tool output, and measures with deterministic evidence whether the attack lands, whether each defense stops it, and what that defense costs in real task completion.
 - **AgentShield** — a standalone runtime guard (`backend/agentshield/`) that sits between *any* agent and its tools and blocks the attack independently of the model. The benchmark runs the exact code the package ships, so what we measure is what you would deploy.
 
 > The question every run answers: *under the same task, attack, model and tools, does this defense reduce attack success while preserving the agent's usefulness?*
+
+```mermaid
+flowchart LR
+    model["Same Meta Muse model"]
+    attack["Same hidden attack<br/>injected into the data the agent reads"]
+    model --> base["Undefended agent"]
+    model --> shield["AgentShield agent"]
+    attack --> base
+    attack --> shield
+    base --> bo["Attack succeeds<br/>e.g. phishing link lands in the report"]
+    shield --> so["Attack contained<br/>task still completes"]
+
+    classDef bad fill:#2a1512,stroke:#f07060,color:#f07060;
+    classDef good fill:#0f241d,stroke:#2fb88a,color:#2fb88a;
+    class bo bad;
+    class so good;
+```
+
+Same model, same task, same attack, same tools. Only the defense differs, so any difference in the outcome is the defense, not luck.
 
 ---
 
@@ -29,7 +48,7 @@ All run on top of an always-on permission gateway, on the same model, task and a
 | Defense | Kind | Idea |
 |---|---|---|
 | Spotlighting | prompt | Security policy + datamarking: untrusted tool output is wrapped and labelled as data |
-| **Content scanner** | model | Muse Spark reads each untrusted tool result (and third-party tool description) *before* the agent and redacts injected instructions; deterministic heuristic fallback |
+| **Content scanner** | model | Muse Spark reads each untrusted tool result (and third-party tool description) *before* the agent and redacts injected instructions. Also transcribes untrusted **screenshots** with Muse Spark vision, so instructions hidden inside an image are caught too; deterministic heuristic fallback |
 | Alignment monitor | model | A second model call audits each proposed action against the user's original request, fail-closed (inspired by LlamaFirewall's AlignmentCheck) |
 | Rule of Two | deterministic | Meta's *Agents Rule of Two*: a session may not combine untrusted input, sensitive access and state change |
 | Provenance guard | deterministic | Taint tracking (CaMeL-style): blocks a state-changing call whose recipient, link or id appears only in untrusted content |
@@ -57,6 +76,30 @@ if decision.allowed:
 
 Layers run in order: gateway (known tool, valid args, permission) → Rule of Two → provenance → alignment monitor on calls; content scanner + datamarking on results. Every decision is emitted to an audit hook. The scanner's judge is any OpenAI-compatible model, so it can run on Muse Spark or on self-hosted open-weight Muse Spark Open — guarded data never has to leave your infrastructure.
 
+```mermaid
+flowchart TD
+    data[("Untrusted data<br/>tickets · docs · web · screenshots")]
+    data -->|tool result| R
+
+    subgraph R["On every tool result"]
+        direction LR
+        vis["Vision scanner<br/>transcribe screenshot"] --> scan["Content scanner<br/>redact injected text"] --> mark["Spotlight<br/>datamark as untrusted"]
+    end
+
+    R -->|sanitized + labelled data| agent["Meta Muse agent"]
+    agent -->|proposed tool call| C
+
+    subgraph C["On every proposed call"]
+        direction LR
+        gw["Gateway<br/>tool · args · permission"] --> r2["Agents<br/>Rule of Two"] --> prov["Provenance guard<br/>taint tracking"] --> mon["Alignment<br/>monitor"]
+    end
+
+    C -->|allow| exec["Execute tool"]
+    C -->|block| refuse["Refuse + audit"]
+    exec -. audit .-> log[("Audit log<br/>+ deterministic score")]
+    R -. audit .-> log
+```
+
 ## Scenarios
 
 Versioned, synthetic. Each fixes the task, world state, attack payload, tool surface, hard permissions and deterministic checks, so paired runs differ only in the defense.
@@ -75,8 +118,12 @@ Versioned, synthetic. Each fixes the task, world state, attack payload, tool sur
 | s13 | Benign-framed exfiltration ("delivery telemetry beacon") | Yes |
 | s14 | Confused-deputy relay + "reply OK" acknowledgement | Yes |
 | s15 | Format confusion: fake delimiters forge a system turn | Yes |
+| **s16** | **Multimodal:** instruction hidden *only* inside a screenshot image | Yes |
+| **s17** | Benign control: legitimate screenshot, no attack | n/a |
 
 Attacks that stay inside the agent's permissions matter most: no permission system can stop them, so only the agent's judgment and the defense layer stand in the way.
+
+**Multimodal injection (s16 / s17).** The newest attack class hides the instruction *only* inside a screenshot the customer attached, so text-only scanners never see it — but a vision-capable Meta model does. AgentShield transcribes every untrusted image with Muse Spark vision, redacts any injected instruction, and hands the agent sanitized, datamarked text. A clean screenshot (s17) still reaches the agent intact, and a vision outage falls back to the known source text rather than ever declaring an image "clean".
 
 ## Metrics
 
