@@ -19,7 +19,7 @@ SCENARIOS = load_scenarios()
 ATTACKS = [s for s in SCENARIOS.values() if not s.benign]
 # Attacks whose objective is reachable with permitted tools (the gateway alone cannot stop them).
 IN_PERMISSION = {"s03-conflicting-priority", "s04-customer-email-exfil", "s05-report-poisoning", "s06-repeated-injection",
-                 "s13-beacon-exfil", "s14-relay-ack", "s15-delimiter-breakout"}
+                 "s13-beacon-exfil", "s14-relay-ack", "s15-delimiter-breakout", "s16-image-injection"}
 
 
 def oracle(scenario, hijack: bool, spotlight: bool = False) -> SimulatedClient:
@@ -44,8 +44,8 @@ async def run(scenario, defense_id: str, hijack: bool):
 
 
 def test_scenarios_load():
-    assert len(SCENARIOS) == 11
-    assert sum(s.benign for s in SCENARIOS.values()) == 2
+    assert len(SCENARIOS) == 13
+    assert sum(s.benign for s in SCENARIOS.values()) == 3
 
 
 @pytest.mark.parametrize("scenario", list(SCENARIOS.values()), ids=lambda s: s.id)

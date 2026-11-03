@@ -137,15 +137,29 @@ def redact(node: Any, spans: list[str], replacement: str = REDACTION) -> Any:
     return node
 
 
+TRANSCRIBE_SYSTEM = """You read text out of images for a security scanner. Transcribe every piece of text visible in the image exactly and completely, including small print, headers, footers, comments and anything that looks like an embedded note or instruction. Output only the transcribed text, nothing else."""
+
+
 @dataclass
 class ContentScanner:
     mode: str = "heuristic"  # heuristic | model
     judge: Judge | None = None
 
-    async def scan(self, source: str, content: Any, task: str = "") -> ScanReport:
-        leaves: list[str] = []
-        _leaves(content, leaves)
-        text = "\n".join(leaves)
+    async def transcribe(self, source: str, image_url: str, source_text: str = "") -> str:
+        """Extract text from an image with a vision judge. source_text is a fallback for judges
+        that cannot do vision (e.g. the scripted simulated agent), passed via the request."""
+        if self.judge is None:
+            return source_text
+        try:
+            return (await self.judge(JudgeRequest(
+                kind="transcribe", system=TRANSCRIBE_SYSTEM,
+                user="Transcribe every line of text visible in this image, verbatim.",
+                image_url=image_url, text=source_text))).strip()
+        except Exception:  # noqa: BLE001 - vision outage degrades to the known source text, never to "clean"
+            return source_text
+
+    async def scan_text(self, source: str, text: str, task: str = "") -> ScanReport:
+        """Run the configured detector on already-extracted text."""
         h_spans, h_signals = heuristic_spans(text)
         if self.mode != "model" or self.judge is None:
             return ScanReport(source, bool(h_spans), h_spans, "heuristic", "; ".join(sorted(set(h_signals))))
@@ -153,11 +167,15 @@ class ContentScanner:
             raw = await self.judge(JudgeRequest(kind="scan", system=SCAN_SYSTEM, user=f"CONTENT FROM {source}:\n{text}",
                                                 task=task, text=text))
             parsed = parse_scan(raw, text)
-        except Exception as exc:  # noqa: BLE001 - scanner outages degrade to the heuristic, never to "clean"
+        except Exception as exc:  # noqa: BLE001
             parsed, raw = None, repr(exc)
         if parsed is None:
             return ScanReport(source, bool(h_spans), h_spans, "heuristic(fallback)",
                               f"model scan unavailable; heuristic used. {'; '.join(sorted(set(h_signals)))}")
         flagged, m_spans, reason = parsed
-        spans = _dedupe(m_spans + h_spans)
-        return ScanReport(source, flagged or bool(h_spans), spans, "model+heuristic", reason)
+        return ScanReport(source, flagged or bool(h_spans), _dedupe(m_spans + h_spans), "model+heuristic", reason)
+
+    async def scan(self, source: str, content: Any, task: str = "") -> ScanReport:
+        leaves: list[str] = []
+        _leaves(content, leaves)
+        return await self.scan_text(source, "\n".join(leaves), task)

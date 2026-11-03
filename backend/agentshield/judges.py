@@ -16,13 +16,24 @@ from agentshield.types import Judge, JudgeRequest
 def openai_judge(client: AsyncOpenAI, model: str, *, reasoning_effort: str | None = None,
                  on_usage: Callable[[dict[str, int]], None] | None = None, max_tokens: int = 2048) -> Judge:
     async def judge(request: JudgeRequest) -> str:
+        if request.image_url:
+            # Vision transcription: read the image. Minimal reasoning so the token budget goes to the
+            # transcription, not chain-of-thought (Muse Spark otherwise spends it all thinking).
+            user_content: Any = [
+                {"type": "image_url", "image_url": {"url": request.image_url}},
+                {"type": "text", "text": request.user},
+            ]
+            effort = "minimal"
+        else:
+            user_content = request.user
+            effort = reasoning_effort
         kwargs: dict[str, Any] = {
             "model": model,
-            "messages": [{"role": "system", "content": request.system}, {"role": "user", "content": request.user}],
+            "messages": [{"role": "system", "content": request.system}, {"role": "user", "content": user_content}],
             "max_tokens": max_tokens,
         }
-        if reasoning_effort:
-            kwargs["extra_body"] = {"reasoning_effort": reasoning_effort}
+        if effort:
+            kwargs["extra_body"] = {"reasoning_effort": effort}
         resp = await client.chat.completions.create(**kwargs)
         if on_usage and resp.usage is not None:
             on_usage({"prompt_tokens": resp.usage.prompt_tokens or 0, "completion_tokens": resp.usage.completion_tokens or 0,

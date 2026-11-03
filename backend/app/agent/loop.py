@@ -73,17 +73,16 @@ def _fill(text: str, injections: list[str]) -> str:
 
 
 def make_judge(client: ModelClient, usage: dict[str, int]):
-    """Guard-model judge on the same model under test (the simulated agent has a scripted judge)."""
+    """Guard-model judge on the same model under test (the simulated agent has a scripted judge).
+
+    Uses the vision-capable openai_judge so the content scanner can transcribe image attachments.
+    """
     if isinstance(client, SimulatedClient):
         return client.judge
 
-    async def judge(request: JudgeRequest) -> str:
-        turn = await client.complete([{"role": "system", "content": request.system},
-                                      {"role": "user", "content": request.user}], None)
-        _add_usage(usage, turn.usage)
-        return turn.content or ""
+    from agentshield.judges import openai_judge
 
-    return judge
+    return openai_judge(client.client, client.model, on_usage=lambda u: _add_usage(usage, u))
 
 
 async def run_agent(scenario: Scenario, defense: DefenseConfig, client: ModelClient, emit: Emit,
@@ -172,10 +171,20 @@ async def run_agent(scenario: Scenario, defense: DefenseConfig, client: ModelCli
                     tool_result = {"error": str(exc)}
                 record.executed, record.result = True, tool_result
                 await emit("tool_executed", {"step": step, "call_id": tc.id, "tool": tc.name, "args": args,
-                                             "result": tool_result, "capabilities": sorted(spec.capabilities),
+                                             "result": _trim_media(tool_result), "capabilities": sorted(spec.capabilities),
                                              "state_diff": state_diff(before, world.state)})
                 obs = await shield.observe_result(tc.name, args, tool_result)
-                content = obs.rendered
+                # Deliver a raw (unscanned) screenshot to the vision-capable real agent as an image.
+                if obs.image_url and not client.profile.simulated:
+                    result.calls.append(record)
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": obs.rendered})
+                    messages.append({"role": "user", "content": [
+                        {"type": "text", "text": f"Attachment returned by {tc.name}:"},
+                        {"type": "image_url", "image_url": {"url": obs.image_url}},
+                    ]})
+                    continue
+                # The simulated agent cannot read an image, so it receives the transcription text.
+                content = obs.transcription if (obs.image_url and client.profile.simulated) else obs.rendered
             result.calls.append(record)
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
 
@@ -188,3 +197,12 @@ def _safe_args(raw: str) -> dict[str, Any] | None:
 
     args, _ = parse_arguments(raw)
     return args
+
+
+def _trim_media(result: Any) -> Any:
+    """Keep the screenshot image for the trace UI, but drop the plaintext ground truth so the stored
+    event shows the image (what the agent saw), not a spoiler of the text hidden inside it."""
+    if isinstance(result, dict) and isinstance(result.get("attachment"), dict):
+        att = {k: v for k, v in result["attachment"].items() if k != "source_text"}
+        return {**result, "attachment": att}
+    return result

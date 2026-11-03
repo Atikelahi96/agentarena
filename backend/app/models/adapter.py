@@ -228,7 +228,10 @@ class SimulatedClient:
         return ModelTurn(content=text, tool_calls=[], finish_reason="stop", message={"role": "assistant", "content": text})
 
     async def judge(self, request: "JudgeRequest") -> str:
-        """Scripted guard model: an imperfect monitor, and the heuristic for content scans."""
+        """Scripted guard model: an imperfect monitor, the heuristic for content scans, and the known
+        source text for vision transcription (the simulated agent cannot read an image)."""
+        if request.kind == "transcribe":
+            return request.text
         if request.kind == "scan":
             from agentshield.scanner import heuristic_spans
 

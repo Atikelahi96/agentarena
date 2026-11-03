@@ -63,6 +63,13 @@ function Value({ v, injections, depth = 0 }: { v: unknown; injections: string[];
   );
 }
 
+function stripImage(result: any): any {
+  if (result?.attachment?.image_url) {
+    return { ...result, attachment: { ...result.attachment, image_url: "[image rendered above]" } };
+  }
+  return result;
+}
+
 function Caps({ caps }: { caps: string[] }) {
   return (
     <span className="inline-flex gap-1">
@@ -225,6 +232,16 @@ function CallCard({ call, injections, compact }: { call: CallView; injections: s
 
       {call.executed && (
         <div className="border-t border-line px-3 py-2">
+          {call.executed.result?.attachment?.image_url && (
+            <figure className="mb-2">
+              <div className="mb-1 flex items-center gap-1.5 text-[11px] text-muted">
+                <span aria-hidden>🖼</span> screenshot attachment — read by the agent with Muse Spark vision
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={call.executed.result.attachment.image_url} alt={call.executed.result.attachment.alt || "screenshot"}
+                   className="max-h-72 w-auto rounded border border-line-strong" />
+            </figure>
+          )}
           {call.executed.state_diff?.length > 0 && (
             <div className="mb-2 space-y-1">
               {call.executed.state_diff.map((d: any, i: number) => (
@@ -246,7 +263,7 @@ function CallCard({ call, injections, compact }: { call: CallView; injections: s
           </button>
           {open && (
             <div className="mt-1 max-h-72 overflow-auto font-mono text-xs">
-              <Value v={call.executed.result} injections={injections} />
+              <Value v={stripImage(call.executed.result)} injections={injections} />
             </div>
           )}
           {!open && JSON.stringify(call.executed.result).match(new RegExp(injections.map((s) => s.slice(0, 30).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") || "$^")) && (

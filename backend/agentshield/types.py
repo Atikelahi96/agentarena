@@ -90,6 +90,8 @@ class Observation:
     content: Any  # what the agent should see (possibly redacted)
     rendered: str  # string form to send to the model (possibly datamarked)
     scan: ScanReport | None = None
+    image_url: str | None = None  # present only when a raw (unscanned) image should reach the agent
+    transcription: str | None = None  # vision transcription of a media result, when one was produced
 
 
 @dataclass
@@ -100,7 +102,7 @@ class JudgeRequest:
     (tests, simulations) decide without parsing prompts.
     """
 
-    kind: Literal["monitor", "scan"]
+    kind: Literal["monitor", "scan", "transcribe"]
     system: str
     user: str
     task: str = ""
@@ -108,6 +110,7 @@ class JudgeRequest:
     args: dict[str, Any] = field(default_factory=dict)
     history: list[dict[str, Any]] = field(default_factory=list)
     text: str = ""
+    image_url: str | None = None  # for "transcribe": a data: or https: image URL to read with vision
 
 
 class Judge(Protocol):
